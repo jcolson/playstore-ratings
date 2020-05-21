@@ -41,7 +41,7 @@ func main() {
 	if appinfo, err := initialFetch(initialUrl); err == nil {
 		if csvString, err := formatCsv(appinfo); err == nil {
 			if err := clipboard.WriteAll(string(csvString)); err == nil {
-				fmt.Println("\n\nCSV copied to your copy/paste buffer")
+				fmt.Println("\n\nCSV copied to your copy/paste buffer; paste it right into Excel")
 			} else {
 				fmt.Println("Could not copy csv to your copy/paste buffer, outputting here:")
 				fmt.Println(csvString)

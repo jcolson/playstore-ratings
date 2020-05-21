@@ -34,7 +34,7 @@ make all
 ```
 
 # how to run
+by executing the binary it will pull the ratings of all the applications for a landing page and populate your copy/paste buffer with the results.  You can then 'paste' those results into Excel.
 double click on the binary for default behavior, which pulls playstore ratings for verizon apps
 
 or run it from the command line and pass the landing page url that you'd like to pull ratings for
-
