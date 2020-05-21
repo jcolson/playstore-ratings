@@ -1,21 +1,18 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"sync"
 
+	"github.com/atotto/clipboard"
 	"golang.org/x/net/html"
 )
-
-// Fetcher interface
-type Fetcher interface {
-	// Fetch returns the body of URL and
-	// a slice of URLs found on that page.
-	Fetch(url string) (body string, urls []string, err error)
-}
 
 // SafeVisitor to be used to determine if url has been visited
 type SafeVisitor struct {
@@ -35,39 +32,42 @@ func (s SafeVisitor) checkvisited(url string) bool {
 	return ok
 }
 
-// Crawl uses fetcher to recursively crawl
-// pages starting with url, to a maximum of depth.
-func Crawl(url string, depth int, fetcher Fetcher, wg *sync.WaitGroup) {
-	defer wg.Done()
-	if depth <= 0 || sv.checkvisited(url) {
-		return
-	}
-	body, urls, err := fetcher.Fetch(url)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Printf("found: %s %q\n", url, body)
-	for _, u := range urls {
-		wg.Add(1)
-		go Crawl(u, depth-1, fetcher, wg)
-	}
-	return
-}
-
 func main() {
 	argsWithoutProg := os.Args[1:]
-	fmt.Println(argsWithoutProg)
 	initialUrl := "https://play.google.com/store/apps/collection/cluster?clp=igM6ChkKEzgyMDQ2OTkzNjYyNDAwMTk3MDQQCBgDEhsKFWNvbS52encuaHNzLm15dmVyaXpvbhABGAMYAQ%3D%3D:S:ANO1ljK_y6A&gsr=Cj2KAzoKGQoTODIwNDY5OTM2NjI0MDAxOTcwNBAIGAMSGwoVY29tLnZ6dy5oc3MubXl2ZXJpem9uEAEYAxgB:S:ANO1ljLQ2zk&gl=US"
 	if len(argsWithoutProg) > 0 {
 		initialUrl = argsWithoutProg[0]
 	}
-	// var wg sync.WaitGroup
-	// wg.Add(1)
-	fetcher.Fetch(initialUrl)
-	// Crawl(initialUrl, 4, fetcherx, &wg)
-	// Wait for all Crawls to complete
-	// wg.Wait()
+	if appinfo, err := initialFetch(initialUrl); err == nil {
+		if csvString, err := formatCsv(appinfo); err == nil {
+			if err := clipboard.WriteAll(string(csvString)); err == nil {
+				fmt.Println("\n\nCSV copied to your copy/paste buffer")
+			} else {
+				fmt.Println("Could not copy csv to your copy/paste buffer, outputting here:")
+				fmt.Println(csvString)
+			}
+		}
+	}
+	fmt.Println("Hit enter to exit")
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Scan()
+}
+
+func formatCsv(appInf []appInfo) (string, error) {
+	buffer := new(bytes.Buffer)
+	csvW := csv.NewWriter(buffer)
+	csvW.Comma = '\t'
+	if err := csvW.Write([]string{"App Name", "App Total", "App Rating", "App URL"}); err != nil {
+		return "", err
+	}
+	for i := range appInf {
+		record := []string{appInf[i].appName, appInf[i].appTotal, appInf[i].appRating, appInf[i].appUrl}
+		if err := csvW.Write(record); err != nil {
+			return "", err
+		}
+	}
+	csvW.Flush()
+	return buffer.String(), nil
 }
 
 func findAttrValue(match string, atts []html.Attribute) string {
@@ -110,11 +110,30 @@ type appInfo struct {
 	appUrl    string
 }
 
-// an http fetcher
-type httpFetcher struct {
+func fetchAppInfo(newUrlString string) (appInfo, error) {
+	if doc, err := fetchDocFromUrl(newUrlString); err == nil {
+		if titleNode := findNodeForDataAndAttrNameValue("h1", "class", "AHFaub", doc); titleNode != nil {
+			// fmt.Printf("title: %s\n", titleNode.FirstChild.FirstChild.Data)
+			if totalNode := findNodeForDataAndAttrNameValue("span", "class", "EymY4b", doc); totalNode != nil {
+				// fmt.Printf("total: %s\n", totalNode.FirstChild.NextSibling.FirstChild.Data)
+				if ratingNode := findNodeForDataAndAttrNameValue("div", "class", "BHMmbe", doc); ratingNode != nil {
+					//fmt.Printf("rating: %s\n", ratingNode.FirstChild.Data)
+					fetchedAppInfo := appInfo{appName: titleNode.FirstChild.FirstChild.Data,
+						appRating: ratingNode.FirstChild.Data,
+						appTotal:  totalNode.FirstChild.NextSibling.FirstChild.Data,
+						appUrl:    newUrlString}
+					return fetchedAppInfo, nil
+				}
+			}
+
+		}
+	} else {
+		return appInfo{}, err
+	}
+	return appInfo{}, fmt.Errorf("nodes not found for %s", newUrlString)
 }
 
-func (f httpFetcher) Fetch(urlString string) ([]appInfo, error) {
+func initialFetch(urlString string) ([]appInfo, error) {
 	fetchedAppInfo := []appInfo{}
 	url, err := url.Parse(urlString)
 	if err != nil {
@@ -125,24 +144,8 @@ func (f httpFetcher) Fetch(urlString string) ([]appInfo, error) {
 		// fmt.Println(appUrls)
 		for appUrl := range appUrls {
 			newUrlString := url.Scheme + "://" + url.Host + appUrls[appUrl]
-			if doc, err := fetchDocFromUrl(newUrlString); err == nil {
-				if titleNode := findNodeForDataAndAttrNameValue("h1", "class", "AHFaub", doc); titleNode != nil {
-					// fmt.Printf("title: %s\n", titleNode.FirstChild.FirstChild.Data)
-					if totalNode := findNodeForDataAndAttrNameValue("span", "class", "EymY4b", doc); totalNode != nil {
-						// fmt.Printf("total: %s\n", totalNode.FirstChild.NextSibling.FirstChild.Data)
-						if ratingNode := findNodeForDataAndAttrNameValue("div", "class", "BHMmbe", doc); ratingNode != nil {
-							// fmt.Printf("rating: %s\n", ratingNode.FirstChild.Data)
-							fetchedAppInfo = append(fetchedAppInfo, appInfo{
-								appName:   titleNode.FirstChild.FirstChild.Data,
-								appRating: ratingNode.FirstChild.Data,
-								appTotal:  totalNode.FirstChild.NextSibling.FirstChild.Data,
-								appUrl:    newUrlString})
-						}
-					}
-
-				}
-			} else {
-				return fetchedAppInfo, err
+			if returnedAppInfo, err := fetchAppInfo(newUrlString); err == nil {
+				fetchedAppInfo = append(fetchedAppInfo, returnedAppInfo)
 			}
 		}
 		return fetchedAppInfo, nil
@@ -153,7 +156,7 @@ func (f httpFetcher) Fetch(urlString string) ([]appInfo, error) {
 }
 
 func fetchDocFromUrl(url string) (*html.Node, error) {
-	// fmt.Printf("url fetching: %s\n", url)
+	fmt.Printf("fetching app info from: %s\n", url)
 	if res, err := http.Get(url); err == nil {
 		defer res.Body.Close()
 		if doc, err := html.Parse(res.Body); err == nil {
@@ -166,55 +169,4 @@ func fetchDocFromUrl(url string) (*html.Node, error) {
 		fmt.Println("http.Get failure")
 		return nil, err
 	}
-}
-
-// fakeFetcher is Fetcher that returns canned results.
-type fakeFetcher map[string]*fakeResult
-
-type fakeResult struct {
-	body string
-	urls []string
-}
-
-func (f fakeFetcher) Fetch(url string) (string, []string, error) {
-	if res, ok := f[url]; ok {
-		return res.body, res.urls, nil
-	}
-	return "", nil, fmt.Errorf("not found: %s", url)
-}
-
-var fetcher = httpFetcher{}
-
-// fetcher is a populated fakeFetcher.
-var fetcherx = fakeFetcher{
-	"https://golang.org/": &fakeResult{
-		"The Go Programming Language",
-		[]string{
-			"https://golang.org/pkg/",
-			"https://golang.org/cmd/",
-		},
-	},
-	"https://golang.org/pkg/": &fakeResult{
-		"Packages",
-		[]string{
-			"https://golang.org/",
-			"https://golang.org/cmd/",
-			"https://golang.org/pkg/fmt/",
-			"https://golang.org/pkg/os/",
-		},
-	},
-	"https://golang.org/pkg/fmt/": &fakeResult{
-		"Package fmt",
-		[]string{
-			"https://golang.org/",
-			"https://golang.org/pkg/",
-		},
-	},
-	"https://golang.org/pkg/os/": &fakeResult{
-		"Package os",
-		[]string{
-			"https://golang.org/",
-			"https://golang.org/pkg/",
-		},
-	},
 }
