@@ -3,26 +3,27 @@
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [playstore-ratings](#playstore-ratings)
-- [how to run](#how-to-run)
-  - [example](#example)
-- [how to build](#how-to-build)
-  - [for your current platform](#for-your-current-platform)
-  - [for another platform](#for-another-platform)
-  - [for all platforms](#for-all-platforms)
+- [How to run](#how-to-run)
+  - [Example](#example)
+- [Geekiness](#geekiness)
+- [How to build](#how-to-build)
+  - [For your current platform](#for-your-current-platform)
+  - [For another platform](#for-another-platform)
+  - [For all platforms](#for-all-platforms)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 # playstore-ratings
 this application pulls the playstore ratings for all applications on a landing page
 
-# how to run
+# How to run
 by executing the binary it will pull the ratings of all the applications for a landing page and populate your copy/paste buffer with the results.  You can then 'paste' those results into Excel.
 
 double click on the binary for default behavior, which pulls playstore ratings for verizon apps -> [default url used](https://play.google.com/store/apps/collection/cluster?clp=igM6ChkKEzgyMDQ2OTkzNjYyNDAwMTk3MDQQCBgDEhsKFWNvbS52encuaHNzLm15dmVyaXpvbhABGAMYAQ%3D%3D:S:ANO1ljK_y6A&gsr=Cj2KAzoKGQoTODIwNDY5OTM2NjI0MDAxOTcwNBAIGAMSGwoVY29tLnZ6dy5oc3MubXl2ZXJpem9uEAEYAxgB:S:ANO1ljLQ2zk&gl=US)
 
 or run it from the command line and pass the landing page url that you'd like to pull ratings for
 
-## example
+## Example
 to execute from command line for Mac:
 
 ```
@@ -103,22 +104,24 @@ Tor Browser	34,295	4.2	https://play.google.com/store/apps/details?id=org.torproj
 Puffin Web Browser	728,916	3.9	https://play.google.com/store/apps/details?id=com.cloudmosa.puffinFree
 ```
 
+# Geekiness
+Was written so that the data would be fetched from each url concurrently (using go routines).  The go routines inherently can not 'return' a value, so you must use channels to do so.  [retrieveAppInfoForEachChildUrl](https://github.com/jcolson/playstore-ratings/blob/3248ac8b392dc52d2498057a793c430746319444/playstore-ratings.go#L161) creates a combinedChannel (and a 'done' channel) in order to achieve the aggregate set of returns from each of the go routines that [makeFetchAppInfoChannels](https://github.com/jcolson/playstore-ratings/blob/3248ac8b392dc52d2498057a793c430746319444/playstore-ratings.go#L194) creates.
 
-# how to build
+# How to build
 
-## for your current platform
+## For your current platform
 ```
 make
 ```
 
-## for another platform
+## For another platform
 ```
 make linux
 make windows
 make darwin
 ```
 
-## for all platforms
+## For all platforms
 ```
 make all
 ```
